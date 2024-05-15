@@ -44,11 +44,10 @@ config :teiserver, DiscordBridgeBot,
     {"bridge_test_room", nil}
   ]
 
-# We don't run a server during test. If one is required,
-# you can enable the server option below.
 config :teiserver, TeiserverWeb.Endpoint,
   http: [port: 4002],
-  server: false
+  # run a server during test for tachyon (requires active ws connection)
+  server: true
 
 # Print only warnings and errors during test
 config :logger, level: :warning

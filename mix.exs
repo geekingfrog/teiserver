@@ -33,10 +33,18 @@ defmodule Teiserver.MixProject do
   def application do
     # get that with mix app.tree nostrum
     nostrum_extras = [:certifi, :gun, :inets, :jason, :kcl, :mime]
+    extra_applications = [:logger, :runtime_tools, :os_mon, :iex] ++ nostrum_extras
     [
       mod: {Teiserver.Application, []},
+      # websockex requires its own otp app, and is used to test websocket
+      # stuff (tachyon) against a test server
       included_applications: [:nostrum],
-      extra_applications: [:logger, :runtime_tools, :os_mon, :iex] ++ nostrum_extras
+      extra_applications:
+        if Mix.env() == :test do
+          [:websockex | extra_applications]
+        else
+          extra_applications
+        end
     ]
   end
 
@@ -102,7 +110,16 @@ defmodule Teiserver.MixProject do
       {:etop, "~> 0.7.0"},
       {:cowlib, "~> 2.11", hex: :remedy_cowlib, override: true},
       {:json_xema, "~> 0.3"},
-      {:nostrum, "~> 0.8"}
+      {:nostrum, "~> 0.8"},
+      # websocket client used to test tachyon
+      {
+        # the version currently in hex.pm is 0.4.3, which doesn't have a change regarding correct
+        # handling of stack traces, so grab the commit at master where it's fixed
+        :websockex,
+        git: "https://github.com/Azolo/websockex.git",
+        tag: "4a94f6870528f45d64cdd47bd4374faf52528466",
+        only: [:test]
+      }
     ]
   end
 

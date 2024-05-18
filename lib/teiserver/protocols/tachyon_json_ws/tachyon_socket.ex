@@ -66,7 +66,11 @@ defmodule Teiserver.Tachyon.TachyonSocket do
 
   @spec init(T.tachyon_ws_state()) :: {:ok, T.tachyon_ws_state()}
   def init(%{conn: %{userid: userid}} = state) do
-    :timer.send_after(1500, :connect_to_client)
+
+    # Not sure why there was a timer for this. For now, just disable the delay
+    # until we implement the protocol and this does things
+    # :timer.send_after(1500, :connect_to_client)
+    send(self(), :connect_to_client)
 
     Logger.metadata(request_id: "TachyonWSServer##{userid}")
     :ok = PubSub.subscribe(Teiserver.PubSub, "teiserver_client_messages:#{userid}")

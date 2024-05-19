@@ -15,13 +15,12 @@ defmodule TeiserverTest.Tachyon.WsConn do
   def connect(url, parent, opts \\ []) do
     state = %{
       parent: parent,
-      ping_interval: opts[:ping_interval]
     }
 
     case WebSockex.start_link(url, __MODULE__, state) do
       {:ok, pid} ->
         if opts[:ping_interval] do
-          send(pid, :ping)
+          :timer.send_interval(opts[:ping_interval], :ping)
         end
 
         {:ok, pid}
@@ -45,8 +44,7 @@ defmodule TeiserverTest.Tachyon.WsConn do
     {:reply, {:text, msg}, state}
   end
 
-  def handle_info(:ping, %{ping_interval: interval} = state) do
-    :timer.send_after(interval, :ping)
+  def handle_info(:ping, state) do
     {:reply, :ping, state}
   end
 end

@@ -13,14 +13,9 @@ defmodule Teiserver.Tachyon.Schema do
         |> File.read!()
         |> Jason.decode!()
 
-      command =
-        file_path
-        |> Path.split()
-        |> Enum.reverse()
-        |> Enum.take(3)
-        |> Enum.reverse()
-        |> Enum.join("/")
-        |> String.replace(".json", "")
+      # this doesn't work for responses since they have no commandId, but for now
+      # this is fine.
+      command = Kernel.get_in(contents, ["properties", "commandId", "const"])
 
       schema = JsonXema.new(contents)
 
@@ -30,7 +25,7 @@ defmodule Teiserver.Tachyon.Schema do
   end
 
   @spec validate!(map) :: :ok
-  def validate!(%{"command" => command} = object) do
+  def validate!(%{"commandId" => command} = object) do
     schema = get_schema(command)
     JsonXema.validate!(schema, object)
   end

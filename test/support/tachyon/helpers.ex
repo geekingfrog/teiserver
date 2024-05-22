@@ -1,6 +1,6 @@
 defmodule TeiserverTest.Tachyon.Helpers do
-
   alias Teiserver.TeiserverTestLib
+  alias TeiserverTest.Tachyon.WebsocketClient
 
   @doc """
   Given a map for the query parameter, returns the tachyon url to connect to
@@ -35,5 +35,15 @@ defmodule TeiserverTest.Tachyon.Helpers do
     }
 
     %{user: user, token: token, query: query}
+  end
+
+  @doc """
+  Establish a websocket connection for the given user (creates one if not provided)
+  """
+  @spec start_connection(nil | Map.t()) :: {:ok, WebsocketClient.client()} | {:error, String.t()}
+  def start_connection(user \\ nil) do
+    %{query: query} = data_setup(user)
+    url = make_url(query)
+    WebsocketClient.connect(url)
   end
 end

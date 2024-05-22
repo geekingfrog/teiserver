@@ -180,11 +180,35 @@ defmodule Teiserver.Tachyon.TachyonSocket do
     {:ok, response, new_conn}
   end
 
-  @spec handle_info(any, T.ws_state()) ::
-          {:reply, :ok, {:binary, binary}, T.ws_state()}
   def handle_info(:connect_to_client, state) do
     Account.cast_client(state.conn.userid, {:update_tcp_pid, self()})
-    {:ok, state}
+    # TODO: handle errors
+    case Handlers.System.Connected.handle(nil, state) do
+      {:ok, data, state} ->
+        resp = %{
+          type: :event,
+          status: :success,
+          messageId: ULID.generate(),
+          commandId: Handlers.System.Connected.command_id(),
+          data: data
+        }
+
+        {:push, {:text, Jason.encode!(resp)}, state}
+
+      {:error, reason, state} ->
+        {:push,
+         {:text,
+          Jason.encode!(%{
+            type: :event,
+            status: :error,
+            messageId: ULID.generate(),
+            commandId: Handlers.System.Connected.command_id(),
+            reason: reason
+          })}, state}
+
+      {:stop, _reason, state} ->
+        {:stop, :normal, state}
+    end
   end
 
   # Holdover from Spring stuff, discard message for now

@@ -1,0 +1,36 @@
+{
+    "$id": "system/disconnect/request",
+    "scopes": [
+        "tachyon.lobby"
+    ],
+    "type": "object",
+    "properties": {
+        "type": {
+            "const": "request",
+            "type": "string"
+        },
+        "messageId": {
+            "type": "string"
+        },
+        "commandId": {
+            "const": "system/disconnect",
+            "type": "string"
+        },
+        "data": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "reason"
+            ]
+        }
+    },
+    "required": [
+        "type",
+        "messageId",
+        "commandId"
+    ]
+}

@@ -84,7 +84,18 @@ defmodule Teiserver.Tachyon.TachyonSocket do
   # {"command": "account/whoAmI/request", "data": {}}
 
   # @spec handle_in({atom, any}, T.ws_state()) :: {:ok, T.ws_state()} | {:reply, :ok, {:text, String.t()}, T.ws_state()}
-  def handle_in({text, _opts}, %{conn: conn} = state) do
+  def handle_in(msg, state) do
+    try do
+      do_handle_in(msg, state)
+    rescue
+      e ->
+        disconnect_crash(msg, state, e)
+
+        {:stop, :normal, state}
+    end
+  end
+
+  defp do_handle_in({text, _opts}, %{conn: conn} = state) do
     with {:ok, raw_json} <- decompress_message(text, conn),
          {:ok, wrapped_object} <- decode_message(raw_json, conn),
          {:ok, resp, new_conn} <- handle_command(wrapped_object, conn) do
@@ -180,7 +191,19 @@ defmodule Teiserver.Tachyon.TachyonSocket do
     {:ok, response, new_conn}
   end
 
-  def handle_info(:connect_to_client, state) do
+  def handle_info(msg, state) do
+    try do
+      do_handle_info(msg, state)
+    rescue
+      e ->
+        disconnect_crash(msg, state, e)
+
+        {:stop, :normal, state}
+    end
+  end
+
+  defp do_handle_info(:connect_to_client, state) do
+    :foo + 1
     Account.cast_client(state.conn.userid, {:update_tcp_pid, self()})
     # TODO: handle errors
     case Handlers.System.Connected.handle(nil, state) do
@@ -212,11 +235,11 @@ defmodule Teiserver.Tachyon.TachyonSocket do
   end
 
   # Holdover from Spring stuff, discard message for now
-  def handle_info({:request_user_join_lobby, _}, state) do
+  defp do_handle_info({:request_user_join_lobby, _}, state) do
     {:ok, state}
   end
 
-  def handle_info(%{channel: channel} = msg, state) do
+  defp do_handle_info(%{channel: channel} = msg, state) do
     # First we find the module to handle this message, we have one module per channel
     module =
       case channel do
@@ -268,19 +291,19 @@ defmodule Teiserver.Tachyon.TachyonSocket do
   end
 
   # We have disconnect on error so we can later more easily make it so people can stay connected on error if needed for some reason
-  def handle_info(:disconnect_on_error, state) do
+  defp do_handle_info(:disconnect_on_error, state) do
     {:stop, :disconnected, state}
   end
 
-  def handle_info(:disconnect, state) do
+  defp do_handle_info(:disconnect, state) do
     {:stop, :disconnected, state}
   end
 
-  def handle_info(%{} = msg, state) do
-    raise msg
+  defp do_handle_info(%{} = msg, state) do
     IO.puts("")
     IO.inspect(msg, label: "ws handle_info")
     IO.puts("")
+    raise msg
 
     # Use this to not send anything
     {:ok, state}
@@ -297,6 +320,16 @@ defmodule Teiserver.Tachyon.TachyonSocket do
     # Logger.error("EEEEE")
 
     # reraise error, stacktrace
+  end
+
+  defp disconnect_crash(msg, state, error) do
+    userid = Kernel.get_in(state, [:conn, :userid])
+
+    Logger.error(
+      "tachyon crashed! #{inspect(error)} handling in #{inspect(msg)} with state #{inspect(state)}"
+    )
+
+    Teiserver.Client.disconnect(userid, "ws terminate - reason: #{inspect(error)}")
   end
 
   @spec terminate(any, any) :: :ok

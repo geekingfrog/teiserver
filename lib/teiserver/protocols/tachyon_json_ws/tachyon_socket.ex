@@ -108,8 +108,11 @@ defmodule Teiserver.Tachyon.TachyonSocket do
       {:json_error, error_message} ->
         {:reply, :ok,
          {:text,
-          %{status: :failed, reason: :invalid_request, data: %{error: error_message}} |> Jason.encode!()},
-         state}
+          %{status: :failed, reason: :invalid_request, data: %{error: error_message}}
+          |> Jason.encode!()}, state}
+
+      {:error, err_resp, conn} ->
+        {:reply, :ok, {:text, err_resp |> Jason.encode!()}, %{state | conn: conn}}
     end
   end
 
@@ -132,71 +135,24 @@ defmodule Teiserver.Tachyon.TachyonSocket do
     end
   end
 
-  defp handle_command(wrapper, conn) do
-    object = wrapper["data"]
-    meta = Map.drop(wrapper, ["data"])
+  @spec handle_command(map(), T.tachyon_conn()) ::
+          {:ok, map() | nil, T.tachyon_conn()} | {:error, map(), T.tachyon_conn()}
+  defp handle_command(request, conn) do
+    message_id = request["messageId"]
+    command_id = request["commandId"]
 
-    {dispatch_response, new_conn} =
-      try do
-        CommandDispatch.dispatch(conn, object, meta)
-      rescue
-        e in FunctionClauseError ->
-          handle_error(e, __STACKTRACE__, conn)
-
-          send(self(), :disconnect_on_error)
-
-          response =
-            ErrorResponse.generate("Server FunctionClauseError for command #{meta["command"]}")
-
-          {response, conn}
-
-        # e in RuntimeError ->
-        #   raise e
-
-        e ->
-          handle_error(e, __STACKTRACE__, conn)
-
-          send(self(), :disconnect_on_error)
-
-          response =
-            ErrorResponse.generate("Internal server error for command #{meta["command"]}")
-
-          {response, conn}
-      end
-
-    response =
-      case dispatch_response do
-        {_command, :success, nil} ->
-          nil
-
-        {command, :success, data} ->
-          %{
-            "command" => command,
-            "status" => "success",
-            "data" => data
-          }
-
-        {command, :error, reason} ->
-          %{
-            "command" => command,
-            "status" => "failure",
-            "reason" => reason
-          }
-
-        {command, {:error, reason}} ->
-          %{
-            "command" => command,
-            "status" => "failure",
-            "reason" => reason
-          }
-      end
-
-    # Currently not able to validate errors so leaving it out
-    # if response != nil do
-    #   Teiserver.Tachyon.Schema.validate!(response)
-    # end
-
-    {:ok, response, new_conn}
+    # TODO: actually handle commands. Ditch the dispatch through a map and go
+    # with the simple match on the command id
+    case command_id do
+      _ ->
+        {:error,
+         %{
+           messageId: message_id,
+           commandId: command_id,
+           status: :failed,
+           reason: :command_unimplemented
+         }, conn}
+    end
   end
 
   def handle_info(msg, state) do

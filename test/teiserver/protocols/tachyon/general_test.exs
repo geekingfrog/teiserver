@@ -24,4 +24,21 @@ defmodule Teiserver.Tachyon.GeneralTest do
     resp = WebsocketClient.receive_message(client, timeout: 10)
     assert resp == {:error, :timeout}
   end
+
+  test "check unimplemented response", %{client: client} do
+    :ok =
+      WebsocketClient.send_message(
+        client,
+        Jason.encode!(%{messageId: "msgid", commandId: "lol/nope"})
+      )
+
+    {:ok, resp} = Helpers.receive_json(client)
+
+    assert resp == %{
+             "status" => "failed",
+             "reason" => "command_unimplemented",
+             "commandId" => "lol/nope",
+             "messageId" => "msgid"
+           }
+  end
 end

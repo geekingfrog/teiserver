@@ -48,4 +48,16 @@ defmodule TeiserverTest.Tachyon.Helpers do
     # avoid waiting long for a test to fail
     WebsocketClient.connect(url, default_timeout: 50)
   end
+
+  @doc """
+  Convenience function to receive a message with the default timeout
+  and attempt to decode the received json
+  """
+  @spec receive_json(WebsocketClient.client()) :: {:ok, any()} | {:error, any()}
+  def receive_json(client) do
+    with {:ok, resp} <- WebsocketClient.receive_message(client),
+         {:ok, decoded} <- Jason.decode(resp) do
+      {:ok, decoded}
+    end
+  end
 end

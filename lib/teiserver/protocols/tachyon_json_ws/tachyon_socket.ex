@@ -106,7 +106,10 @@ defmodule Teiserver.Tachyon.TachyonSocket do
       end
     else
       {:json_error, error_message} ->
-        {:reply, :ok, {:text, %{error: error_message} |> Jason.encode!()}, state}
+        {:reply, :ok,
+         {:text,
+          %{status: :failed, reason: :invalid_request, data: %{error: error_message}} |> Jason.encode!()},
+         state}
     end
   end
 
@@ -120,7 +123,7 @@ defmodule Teiserver.Tachyon.TachyonSocket do
   defp decode_message(text, _conn) do
     case Jason.decode(text) do
       {:ok, msg} -> {:ok, msg}
-      {:error, err} -> {:json_error, "Decode error: #{inspect(err)}"}
+      {:error, err} -> {:json_error, "Decode error: #{Exception.message(err)}"}
     end
   end
 

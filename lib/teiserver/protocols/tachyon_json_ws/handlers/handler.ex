@@ -7,8 +7,8 @@ defmodule Teiserver.Tachyon.Handler do
   # {:error, reason, new_state} -> reason to be sent to the client
   # {:stop, new_state} -> disconnect the client
   # {:ok, data, new state} -> data to send to the client
-  @callback handle(data :: any(), state :: T.ws_state()) ::
-              {:error, String.t(), T.ws_state()}
-              | {:stop, any(), T.ws_state()}
-              | {:ok, any(), T.ws_state()}
+  @callback handle(data :: any(), state :: T.tachyon_conn()) ::
+              {:error, String.t(), T.tachyon_conn()}
+              | {:stop, any(), T.tachyon_conn()}
+              | {:ok, any(), T.tachyon_conn()}
 end

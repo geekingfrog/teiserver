@@ -84,7 +84,7 @@ defmodule Teiserver.Tachyon.TachyonSocket do
       do_handle_in(msg, state)
     rescue
       e ->
-        disconnect_crash(msg, state, e)
+        disconnect_crash(msg, state, e, __STACKTRACE__)
 
         {:stop, :normal, state}
     end
@@ -159,7 +159,7 @@ defmodule Teiserver.Tachyon.TachyonSocket do
       do_handle_info(msg, state)
     rescue
       e ->
-        disconnect_crash(msg, state, e)
+        disconnect_crash(msg, state, e, __STACKTRACE__)
 
         {:stop, :normal, state}
     end
@@ -168,8 +168,8 @@ defmodule Teiserver.Tachyon.TachyonSocket do
   defp do_handle_info(:connect_to_client, state) do
     Account.cast_client(state.conn.userid, {:update_tcp_pid, self()})
     # TODO: handle errors
-    case Handlers.System.Connected.handle(nil, state) do
-      {:ok, data, state} ->
+    case Handlers.System.Connected.handle(nil, state.conn) do
+      {:ok, data, conn} ->
         resp = %{
           type: :event,
           status: :success,
@@ -178,9 +178,9 @@ defmodule Teiserver.Tachyon.TachyonSocket do
           data: data
         }
 
-        {:push, {:text, Jason.encode!(resp)}, state}
+        {:push, {:text, Jason.encode!(resp)}, %{state | conn: conn}}
 
-      {:error, reason, state} ->
+      {:error, reason, conn} ->
         {:push,
          {:text,
           Jason.encode!(%{
@@ -189,10 +189,10 @@ defmodule Teiserver.Tachyon.TachyonSocket do
             messageId: ULID.generate(),
             commandId: Handlers.System.Connected.command_id(),
             reason: reason
-          })}, state}
+          })}, %{state | conn: conn}}
 
-      {:stop, _reason, state} ->
-        {:stop, :normal, state}
+      {:stop, _reason, conn} ->
+        {:stop, :normal, %{state | conn: conn}}
     end
   end
 
@@ -284,11 +284,11 @@ defmodule Teiserver.Tachyon.TachyonSocket do
     # reraise error, stacktrace
   end
 
-  defp disconnect_crash(msg, state, error) do
+  defp disconnect_crash(msg, state, error, trace) do
     userid = Kernel.get_in(state, [:conn, :userid])
 
     Logger.error(
-      "tachyon crashed! #{inspect(error)} handling in #{inspect(msg)} with state #{inspect(state)}"
+      "tachyon crashed! #{inspect(error)} handling in #{inspect(msg)}. Trace: #{inspect(trace)}"
     )
 
     Teiserver.Client.disconnect(userid, "ws terminate - reason: #{inspect(error)}")

@@ -11,9 +11,8 @@ defmodule Teiserver.Tachyon.Handlers.System.Connected do
   @impl Handler
   def command_id(), do: "system/connected"
 
-  # @spec handle_connected(Types.tachyon_conn()) :: {:ok, any()}
   @impl Handler
-  def handle(_, %{conn: conn} = state) do
+  def handle(_, conn) do
     resp = %{
       userId: to_string(conn.userid),
       username: conn.username,
@@ -32,6 +31,6 @@ defmodule Teiserver.Tachyon.Handlers.System.Connected do
       ignoreIds: []
     }
 
-    {:ok, resp, state}
+    {:ok, resp, conn}
   end
 end

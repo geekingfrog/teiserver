@@ -42,10 +42,10 @@ defmodule TeiserverTest.Tachyon.WebsocketClient do
   @doc """
   Send a text message to the peer
   """
-  @spec send_message(client, String.t()) :: :ok | {:error, reason :: term}
-  def send_message(client, msg) do
+  @spec send_message(client, String.t(), :text | :binary | nil) :: :ok | {:error, reason :: term}
+  def send_message(client, msg, type \\ :text) do
     if Process.alive?(client.pid) do
-      GenServer.call(client.pid, {:send_message, msg})
+      GenServer.call(client.pid, {:send_message, msg, type})
     else
       {:error, :disconnected}
     end
@@ -115,8 +115,8 @@ defmodule TeiserverTest.Tachyon.WebsocketClient do
   end
 
   @impl true
-  def handle_call({:send_message, msg}, _from, %{conn: conn} = state) do
-    :ok = WebSockex.send_frame(conn, {:text, msg})
+  def handle_call({:send_message, msg, type}, _from, %{conn: conn} = state) do
+    :ok = WebSockex.send_frame(conn, {type, msg})
     {:reply, :ok, state}
   end
 

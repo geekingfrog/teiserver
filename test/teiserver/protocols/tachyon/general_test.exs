@@ -18,4 +18,10 @@ defmodule Teiserver.Tachyon.GeneralTest do
     resp = Jason.decode!(resp)
     assert resp["status"] == "failed"
   end
+
+  test "ignore binary frames", %{client: client} do
+    :ok = WebsocketClient.send_message(client, <<0xDE, 0xAD, 0xBE, 0xEF>>, :binary)
+    resp = WebsocketClient.receive_message(client, timeout: 10)
+    assert resp == {:error, :timeout}
+  end
 end

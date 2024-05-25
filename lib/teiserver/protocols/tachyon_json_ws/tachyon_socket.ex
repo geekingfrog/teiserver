@@ -95,7 +95,7 @@ defmodule Teiserver.Tachyon.TachyonSocket do
     end
   end
 
-  defp do_handle_in({text, _opts}, %{conn: conn} = state) do
+  defp do_handle_in({text, [opcode: :text]}, %{conn: conn} = state) do
     with {:ok, raw_json} <- decompress_message(text, conn),
          {:ok, wrapped_object} <- decode_message(raw_json, conn),
          {:ok, resp, new_conn} <- handle_command(wrapped_object, conn) do
@@ -111,6 +111,11 @@ defmodule Teiserver.Tachyon.TachyonSocket do
           %{status: :failed, reason: :invalid_request, data: %{error: error_message}} |> Jason.encode!()},
          state}
     end
+  end
+
+  # ignore any binary frame
+  defp do_handle_in({_, [opcode: :binary]}, state) do
+    {:ok, state}
   end
 
   # We currently don't have compression but if/when we do it will be tracked in the conn
@@ -206,7 +211,6 @@ defmodule Teiserver.Tachyon.TachyonSocket do
   end
 
   defp do_handle_info(:connect_to_client, state) do
-    :foo + 1
     Account.cast_client(state.conn.userid, {:update_tcp_pid, self()})
     # TODO: handle errors
     case Handlers.System.Connected.handle(nil, state) do

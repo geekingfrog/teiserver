@@ -116,8 +116,20 @@ defmodule TeiserverTest.Tachyon.WebsocketClient do
 
   @impl true
   def handle_call({:send_message, msg, type}, _from, %{conn: conn} = state) do
-    :ok = WebSockex.send_frame(conn, {type, msg})
-    {:reply, :ok, state}
+    try do
+      case WebSockex.send_frame(conn, {type, msg}) do
+        :ok ->
+          {:reply, :ok, state}
+
+        {:error, %WebSockex.NotConnectedError{}} ->
+          reply_disconnected(state)
+      end
+    catch
+      # consider any error fatal and disconnect
+      _, _ ->
+        Process.exit(conn, :normal)
+        reply_disconnected(state)
+    end
   end
 
   @impl true
@@ -196,5 +208,9 @@ defmodule TeiserverTest.Tachyon.WebsocketClient do
     }
 
     {:stop, :normal, final_state}
+  end
+
+  defp reply_disconnected(state) do
+    {:reply, {:error, :disconnected}, %{state | conn_state: :disconnected}}
   end
 end

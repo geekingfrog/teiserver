@@ -1,8 +1,6 @@
 defmodule Teiserver.Tachyon.GeneralTest do
   use TeiserverWeb.ConnCase, async: false
   require Logger
-  alias Teiserver.TeiserverTestLib
-  alias Teiserver.Tachyon.Schema
   alias TeiserverTest.Tachyon.{WebsocketClient, Helpers}
 
   setup do

@@ -18,6 +18,7 @@ defmodule Teiserver.Tachyon.Types do
           exempt_from_cmd_throttle: boolean(),
           cmd_timestamps: list(non_neg_integer()),
           error_handle: term(),
+          status: :connected | :disconnected,
           flood_rate_limit_count: non_neg_integer() | nil,
           floot_rate_window_size: non_neg_integer() | nil
         }

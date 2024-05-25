@@ -72,8 +72,9 @@ defmodule Teiserver.Tachyon.TachyonSocket do
     send(self(), :connect_to_client)
 
     Logger.metadata(request_id: "TachyonWSServer##{userid}")
-    :ok = PubSub.subscribe(Teiserver.PubSub, "teiserver_client_messages:#{userid}")
-    :ok = PubSub.subscribe(Teiserver.PubSub, "teiserver_server")
+    # TODO: figure out what are these topics used for and how to handle them in tachyon
+    # :ok = PubSub.subscribe(Teiserver.PubSub, "teiserver_client_messages:#{userid}")
+    # :ok = PubSub.subscribe(Teiserver.PubSub, "teiserver_server")
 
     {:ok, state}
   end
@@ -94,14 +95,28 @@ defmodule Teiserver.Tachyon.TachyonSocket do
           {:ok, T.ws_state()}
           | {:reply, :ok | :error, {opcode :: atom(), message :: term()}, T.ws_state()}
           | {:stop, reason :: term(), T.ws_state()}
+  defp do_handle_in(_, %{conn: %{status: :disconnected}} = state) do
+    {:ok, state}
+  end
+
   defp do_handle_in({text, [opcode: :text]}, %{conn: conn} = state) do
     with {:ok, raw_json} <- decompress_message(text, conn),
-         {:ok, wrapped_object} <- decode_message(raw_json, conn),
-         {:ok, resp, new_conn} <- handle_command(wrapped_object, conn) do
-      if resp != nil do
-        {:reply, :ok, {:text, resp |> Jason.encode!()}, %{state | conn: new_conn}}
-      else
-        {:ok, state}
+         {:ok, wrapped_object} <- decode_message(raw_json, conn) do
+      case handle_command(wrapped_object, conn) do
+        {:ok, resp, new_conn} ->
+          {:reply, :ok, {:text, Jason.encode!(resp)}, %{state | conn: new_conn}}
+
+        {:stop, resp, new_conn} ->
+          send(self(), :disconnect)
+
+          # Set the disconnected status immediately to avoid any potential race
+          # where the send(self(), :disconnect) is processed after some other messages
+          # already enqueued
+          {:reply, :ok, {:text, Jason.encode!(resp)},
+           %{state | conn: %{new_conn | status: :disconnected}}}
+
+        {:error, err_resp, new_conn} ->
+          {:reply, :ok, {:text, Jason.encode!(err_resp)}, %{state | conn: new_conn}}
       end
     else
       {:json_error, error_message} ->
@@ -109,9 +124,6 @@ defmodule Teiserver.Tachyon.TachyonSocket do
          {:text,
           %{status: :failed, reason: :invalid_request, data: %{error: error_message}}
           |> Jason.encode!()}, state}
-
-      {:error, err_resp, conn} ->
-        {:reply, :ok, {:text, err_resp |> Jason.encode!()}, %{state | conn: conn}}
     end
   end
 
@@ -139,18 +151,41 @@ defmodule Teiserver.Tachyon.TachyonSocket do
   defp handle_command(request, conn) do
     message_id = request["messageId"]
     command_id = request["commandId"]
+    data = request["data"]
 
     # TODO: actually handle commands. Ditch the dispatch through a map and go
     # with the simple match on the command id
-    case command_id do
-      _ ->
-        {:error,
-         %{
-           messageId: message_id,
-           commandId: command_id,
-           status: :failed,
-           reason: :command_unimplemented
-         }, conn}
+    response =
+      case command_id do
+        "system/disconnect" ->
+          Handlers.System.DisconnectRequest.handle(data, conn)
+
+        _ ->
+          {:error, :command_unimplemented, conn}
+      end
+
+    wrapper = %{messageId: message_id, commandId: command_id}
+
+    case response do
+      {:ok, resp, conn} ->
+        {:ok, wrap_success(message_id, command_id, resp), conn}
+
+      {:stop, resp, conn} ->
+        {:stop, wrap_success(message_id, command_id, resp), conn}
+
+      {:error, reason, conn} ->
+        {:error, %{messageId: message_id, commandId: command_id, status: :failed, reason: reason},
+         conn}
+    end
+  end
+
+  defp wrap_success(msg_id, cmd_id, resp) do
+    base = %{messageId: msg_id, commandId: cmd_id, status: :success}
+
+    if is_nil(resp) do
+      base
+    else
+      Map.put(base, :data, resp)
     end
   end
 
@@ -202,55 +237,60 @@ defmodule Teiserver.Tachyon.TachyonSocket do
   end
 
   defp do_handle_info(%{channel: channel} = msg, state) do
-    # First we find the module to handle this message, we have one module per channel
-    module =
-      case channel do
-        "teiserver_lobby_host_message" <> _ ->
-          MessageHandlers.LobbyHostMessageHandlers
-
-        "teiserver_client_messages" <> _ ->
-          MessageHandlers.ClientMessageHandlers
-
-        "teiserver_lobby_updates" <> _ ->
-          MessageHandlers.LobbyUpdateMessageHandlers
-
-        "teiserver_lobby_chat" <> _ ->
-          MessageHandlers.LobbyChatMessageHandlers
-
-        _ ->
-          raise "No handler for messages to channel #{msg.channel}"
-      end
-
-    # Now we get the module to try and handle it
-    try do
-      case module.handle(msg, state.conn) do
-        nil ->
-          {:ok, state}
-
-        {:ok, new_conn} ->
-          {:ok, %{state | conn: new_conn}}
-
-        {:ok, resp, new_conn} ->
-          {:reply, :ok, {:text, resp |> Jason.encode!()}, %{state | conn: new_conn}}
-      end
-    rescue
-      e ->
-        handle_error(e, __STACKTRACE__, state.conn)
-
-        send(self(), :disconnect_on_error)
-
-        {command, _, reason} =
-          ErrorResponse.generate("Internal server error for internal channel #{channel}")
-
-        response = %{
-          "command" => command,
-          "status" => "failure",
-          "reason" => reason
-        }
-
-        {:reply, :ok, {:text, response |> Jason.encode!()}, state}
-    end
+    {:ok, state}
   end
+
+  # TODO: figure out what these messages mean and how to handle them
+  # defp do_handle_info(%{channel: channel} = msg, state) do
+  #   # First we find the module to handle this message, we have one module per channel
+  #   module =
+  #     case channel do
+  #       "teiserver_lobby_host_message" <> _ ->
+  #         MessageHandlers.LobbyHostMessageHandlers
+  #
+  #       "teiserver_client_messages" <> _ ->
+  #         MessageHandlers.ClientMessageHandlers
+  #
+  #       "teiserver_lobby_updates" <> _ ->
+  #         MessageHandlers.LobbyUpdateMessageHandlers
+  #
+  #       "teiserver_lobby_chat" <> _ ->
+  #         MessageHandlers.LobbyChatMessageHandlers
+  #
+  #       _ ->
+  #         raise "No handler for messages to channel #{msg.channel} #{inspect(msg)}"
+  #     end
+  #
+  #   # Now we get the module to try and handle it
+  #   try do
+  #     case module.handle(msg, state.conn) do
+  #       nil ->
+  #         {:ok, state}
+  #
+  #       {:ok, new_conn} ->
+  #         {:ok, %{state | conn: new_conn}}
+  #
+  #       {:ok, resp, new_conn} ->
+  #         {:reply, :ok, {:text, resp |> Jason.encode!()}, %{state | conn: new_conn}}
+  #     end
+  #   rescue
+  #     e ->
+  #       handle_error(e, __STACKTRACE__, state.conn)
+  #
+  #       send(self(), :disconnect_on_error)
+  #
+  #       {command, _, reason} =
+  #         ErrorResponse.generate("Internal server error for internal channel #{channel}")
+  #
+  #       response = %{
+  #         "command" => command,
+  #         "status" => "failure",
+  #         "reason" => reason
+  #       }
+  #
+  #       {:reply, :ok, {:text, response |> Jason.encode!()}, state}
+  #   end
+  # end
 
   # We have disconnect on error so we can later more easily make it so people can stay connected on error if needed for some reason
   defp do_handle_info(:disconnect_on_error, state) do
@@ -258,7 +298,7 @@ defmodule Teiserver.Tachyon.TachyonSocket do
   end
 
   defp do_handle_info(:disconnect, state) do
-    {:stop, :disconnected, state}
+    {:stop, :normal, state}
   end
 
   defp do_handle_info(%{} = msg, state) do
@@ -338,6 +378,7 @@ defmodule Teiserver.Tachyon.TachyonSocket do
       exempt_from_cmd_throttle: exempt_from_cmd_throttle,
       cmd_timestamps: [],
       error_handle: :raise,
+      status: :connected,
 
       # Caching app configs
       flood_rate_limit_count:

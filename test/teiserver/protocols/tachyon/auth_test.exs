@@ -2,7 +2,6 @@ defmodule Teiserver.Tachyon.AuthTest do
   use TeiserverWeb.ConnCase, async: false
   require Logger
 
-  alias Teiserver.TeiserverTestLib
   alias TeiserverTest.Tachyon.WebsocketClient
   alias TeiserverTest.Tachyon.Helpers
 

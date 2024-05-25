@@ -6,7 +6,7 @@ defmodule Teiserver.Tachyon.TachyonSocket do
   alias Phoenix.PubSub
   alias Teiserver.Config
   alias Teiserver.Account
-  alias Teiserver.Tachyon.{CommandDispatch, MessageHandlers}
+  alias Teiserver.Tachyon.MessageHandlers
   alias Teiserver.Tachyon.Handlers
   alias Teiserver.Tachyon.Responses.System.ErrorResponse
   # alias Teiserver.Tachyon.Socket.PubsubHandlers
@@ -14,8 +14,6 @@ defmodule Teiserver.Tachyon.TachyonSocket do
 
   @spec child_spec(any) :: :ignore
   def child_spec(_opts) do
-    # We won't spawn any process, so let's return a dummy task
-    # %{id: __MODULE__, start: {Task, :start_link, [fn -> :ok end]}, restart: :transient}
     :ignore
   end
 
@@ -80,9 +78,6 @@ defmodule Teiserver.Tachyon.TachyonSocket do
     {:ok, state}
   end
 
-  # Example of a good whoami request
-  # {"command": "account/whoAmI/request", "data": {}}
-
   # @spec handle_in({atom, any}, T.ws_state()) :: {:ok, T.ws_state()} | {:reply, :ok, {:text, String.t()}, T.ws_state()}
   def handle_in(msg, state) do
     try do
@@ -95,6 +90,10 @@ defmodule Teiserver.Tachyon.TachyonSocket do
     end
   end
 
+  @spec do_handle_in({String.t(), [opcode: :text]} | {binary(), [opcode: :binary]}, T.ws_state()) ::
+          {:ok, T.ws_state()}
+          | {:reply, :ok | :error, {opcode :: atom(), message :: term()}, T.ws_state()}
+          | {:stop, reason :: term(), T.ws_state()}
   defp do_handle_in({text, [opcode: :text]}, %{conn: conn} = state) do
     with {:ok, raw_json} <- decompress_message(text, conn),
          {:ok, wrapped_object} <- decode_message(raw_json, conn),

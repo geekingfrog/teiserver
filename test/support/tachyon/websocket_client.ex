@@ -6,24 +6,37 @@ defmodule TeiserverTest.Tachyon.WebsocketClient do
 
   use GenServer
 
-  @opaque client :: pid
+  @enforce_keys [:pid, :default_timeout]
+  defstruct [:pid, :default_timeout]
+
+  @opaque client :: %__MODULE__{pid: pid, default_timeout: timeout()}
 
   @doc """
   Connect to the given url.
-  Can provide :ping_interval to send a ping frame every `ping_interval` ms
+  Options:
+    * :ping_interval to send a ping frame every `ping_interval` ms
+    * :default_timeout how long receive_message should wait before any timeout
   """
-  @spec connect!(String.t(), ping_interval: timeout() | nil) :: {:ok, client}
+  @spec connect!(String.t(), ping_interval: timeout() | nil, default_timeout: timeout() | nil) ::
+          {:ok, client}
   def connect!(url, opts \\ []) do
-    GenServer.start_link(__MODULE__, [url: url] ++ opts)
+    with {:ok, pid} <- GenServer.start_link(__MODULE__, [url: url] ++ opts) do
+      client = %__MODULE__{pid: pid, default_timeout: Keyword.get(opts, :default_timeout, 10_000)}
+      {:ok, client}
+    end
   end
 
   @doc """
   Same as connect/2 but doesn't use start_link, so if the underlying websocket
   connection fails, it doesn't kill the caller
   """
-  @spec connect(String.t(), ping_interval: timeout() | nil) :: {:ok, client}
+  @spec connect(String.t(), ping_interval: timeout() | nil, default_timeout: timeout() | nil) ::
+          {:ok, client}
   def connect(url, opts \\ []) do
-    GenServer.start(__MODULE__, [url: url] ++ opts)
+    with {:ok, pid} <- GenServer.start(__MODULE__, [url: url] ++ opts) do
+      client = %__MODULE__{pid: pid, default_timeout: Keyword.get(opts, :default_timeout, 10_000)}
+      {:ok, client}
+    end
   end
 
   @doc """
@@ -31,8 +44,8 @@ defmodule TeiserverTest.Tachyon.WebsocketClient do
   """
   @spec send_message(client, String.t()) :: :ok | {:error, reason :: term}
   def send_message(client, msg) do
-    if Process.alive?(client) do
-      GenServer.call(client, {:send_message, msg})
+    if Process.alive?(client.pid) do
+      GenServer.call(client.pid, {:send_message, msg})
     else
       {:error, :disconnected}
     end
@@ -46,9 +59,13 @@ defmodule TeiserverTest.Tachyon.WebsocketClient do
   @spec receive_message(client, timeout: timeout()) ::
           {:ok, String.t()} | {:error, reason :: term}
   def receive_message(client, opts \\ []) do
-    if Process.alive?(client) do
+    if Process.alive?(client.pid) do
       try do
-        GenServer.call(client, :receive_message, opts[:timeout] || 10_000)
+        GenServer.call(
+          client.pid,
+          :receive_message,
+          Keyword.get(opts, :timeout, client.default_timeout)
+        )
       catch
         :exit, {:timeout, _} ->
           {:error, :timeout}
@@ -64,9 +81,8 @@ defmodule TeiserverTest.Tachyon.WebsocketClient do
   """
   @spec disconnect(client) :: :ok
   def disconnect(client) do
-    if Process.alive?(client) do
-      GenServer.cast(client, :disconnect)
-      # GenServer.stop(client, :disconnect)
+    if Process.alive?(client.pid) do
+      GenServer.cast(client.pid, :disconnect)
     end
 
     :ok

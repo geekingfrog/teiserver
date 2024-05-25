@@ -44,6 +44,8 @@ defmodule TeiserverTest.Tachyon.Helpers do
   def start_connection(user \\ nil) do
     %{query: query} = data_setup(user)
     url = make_url(query)
-    WebsocketClient.connect(url)
+    # set a short timeout. During test nothing should take long and it'll
+    # avoid waiting long for a test to fail
+    WebsocketClient.connect(url, default_timeout: 50)
   end
 end

@@ -16,28 +16,28 @@ defmodule Teiserver.Tachyon.AuthTest do
   test "testing invalid token" do
     %{query: query} = Helpers.data_setup()
     url = Helpers.make_url(%{query | token: "INVALID TOKEN"})
-    {:error, %WebSockex.RequestError{code: code}} = WebsocketClient.connect(url)
-    assert code == 401
+    {:error, resp} = WebsocketClient.connect(url)
+    assert resp.code == 401
   end
 
   test "testing missing app hash" do
     %{query: query} = Helpers.data_setup()
     url = Helpers.make_url(Map.drop(query, [:application_hash]))
-    {:error, %WebSockex.RequestError{code: code}} = WebsocketClient.connect(url)
-    assert code == 400
+    {:error, resp} = WebsocketClient.connect(url)
+    assert resp.code == 400
   end
 
   test "testing missing app name" do
     %{query: query} = Helpers.data_setup()
     url = Helpers.make_url(Map.drop(query, [:application_name]))
-    {:error, %WebSockex.RequestError{code: code}} = WebsocketClient.connect(url)
-    assert code == 400
+    {:error, resp} = WebsocketClient.connect(url)
+    assert resp.code == 400
   end
 
   test "testing missing app version" do
     %{query: query} = Helpers.data_setup()
     url = Helpers.make_url(Map.drop(query, [:application_version]))
-    {:error, %WebSockex.RequestError{code: code}} = WebsocketClient.connect(url)
-    assert code == 400
+    {:error, resp} = WebsocketClient.connect(url)
+    assert resp.code == 400
   end
 end

@@ -7,7 +7,7 @@ defmodule Teiserver.Tachyon.SystemTest do
 
   test "receive system message upon connection" do
     {:ok, client} = Helpers.start_connection()
-    {:ok, message} = WebsocketClient.receive_message(client, timeout: 50)
+    {:ok, message} = WebsocketClient.receive_message(client)
     resp = Jason.decode!(message)
     Schema.validate!(resp)
   end

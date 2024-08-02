@@ -26,6 +26,11 @@ defmodule Teiserver.Tachyon.Transport do
   end
 
   @impl true
+  def handle_info(:send_ping, state) do
+    schedule_ping()
+    {:push, {:ping, <<0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0>>}, state}
+  end
+
   def handle_info(msg, state) do
     IO.inspect(msg, label: "info msg")
     {:ok, state}
@@ -63,5 +68,11 @@ defmodule Teiserver.Tachyon.Transport do
       {:stop, reason, close_details, messages, state} ->
         {:stop, reason, close_details, messages, %{conn_state | state: state}}
     end
+  end
+
+  defp schedule_ping() do
+    # we want a ping/pong every 10s and avoid thundering herd
+    wait = 1_000 + :rand.uniform(8500)
+    :timer.send_after(wait, :send_ping)
   end
 end

@@ -11,14 +11,19 @@ defmodule Teiserver.Player.Session do
   require Logger
 
   alias Teiserver.Data.Types, as: T
-  alias Teiserver.Player
+  alias Teiserver.{Player, Matchmaking}
 
   @type conn_state :: :connected | :reconnecting | :disconnected
+
+  @type matchmaking_state :: %{
+          joined_queues: [Matchmaking.queue_id()]
+        }
 
   @type state :: %{
           user_id: T.userid(),
           mon_ref: reference(),
-          conn_pid: pid() | nil
+          conn_pid: pid() | nil,
+          matchmaking: matchmaking_state()
         }
 
   @spec conn_state(T.userid()) :: conn_state()
@@ -27,6 +32,11 @@ defmodule Teiserver.Player.Session do
   catch
     :exit, {:noproc, _} ->
       :disconnected
+  end
+
+  @spec join_queue(T.userid(), Matchmaking.queue_id()) :: Matchmaking.join_result()
+  def join_queue(user_id, queue_id) do
+    GenServer.call(via_tuple(user_id), {:join_queue, queue_id})
   end
 
   def start_link({_conn_pid, user_id} = arg) do
@@ -50,7 +60,10 @@ defmodule Teiserver.Player.Session do
     state = %{
       user_id: user_id,
       mon_ref: ref,
-      conn_pid: conn_pid
+      conn_pid: conn_pid,
+      matchmaking_state: %{
+        joined_queues: []
+      }
     }
 
     {:ok, state}
@@ -71,6 +84,21 @@ defmodule Teiserver.Player.Session do
   def handle_call(:conn_state, _from, state) do
     result = if is_nil(state.conn_pid), do: :reconnecting, else: :connected
     {:reply, result, state}
+  end
+
+  def handle_call({:join_queue, queue_id}, _from, state) do
+    if Enum.member?(state.matchmaking_state.joined_queues, queue_id) do
+      {:reply, {:error, :already_queued}, state}
+    else
+      case Matchmaking.join_queue(queue_id, state.user_id) do
+        :ok ->
+          {:reply, :ok,
+           update_in(state.matchmaking_state.joined_queues, fn qs -> [queue_id | qs] end)}
+
+        {:error, err} ->
+          {:reply, {:error, err}, state}
+      end
+    end
   end
 
   @impl true

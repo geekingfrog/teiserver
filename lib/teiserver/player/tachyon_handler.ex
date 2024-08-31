@@ -78,7 +78,7 @@ defmodule Teiserver.Player.TachyonHandler do
   end
 
   def handle_command("matchmaking/queue" = cmd_id, "request", message_id, message, state) do
-    queue_id = message["data"]["queue"]
+    queue_id = message["data"]["queueId"]
 
     response =
       case Player.Session.join_queue(state.user.id, queue_id) do

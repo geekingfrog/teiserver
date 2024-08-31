@@ -51,6 +51,11 @@ defmodule Teiserver.Player.Session do
     GenServer.call(via_tuple(user_id), {:join_queue, queue_id})
   end
 
+  @spec leave_queue(T.userid(), Matchmaking.queue_id()) :: Matchmaking.leave_result()
+  def leave_queue(user_id, queue_id) do
+    GenServer.call(via_tuple(user_id), {:leave_queue, queue_id})
+  end
+
   def start_link({_conn_pid, user_id} = arg) do
     GenServer.start_link(__MODULE__, arg, name: via_tuple(user_id))
   end
@@ -124,6 +129,23 @@ defmodule Teiserver.Player.Session do
         {:error, err} ->
           {:reply, {:error, err}, state}
       end
+    end
+  end
+
+  def handle_call({:leave_queue, queue_id}, _from, state) do
+    if Enum.member?(state.matchmaking.joined_queues, queue_id) do
+      case Matchmaking.leave_queue(queue_id, state.user_id) do
+        :ok ->
+          {:reply, :ok,
+           update_in(state.matchmaking.joined_queues, fn qs ->
+             Enum.reject(qs, fn qid -> qid == queue_id end)
+           end)}
+
+        {:error, err} ->
+          {:reply, {:error, err}, state}
+      end
+    else
+      {:reply, {:error, :not_queued}, state}
     end
   end
 

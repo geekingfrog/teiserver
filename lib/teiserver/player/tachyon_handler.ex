@@ -322,14 +322,7 @@ defmodule Teiserver.Player.TachyonHandler do
   end
 
   def handle_command("user/subscribeUpdates" = cmd_id, "request", message_id, msg, state) do
-    # that kind of parsing can probably be extracted, will likely be generally useful
-    {ok_ids, invalid_ids} =
-      Enum.reduce(msg["data"]["userIds"], {[], []}, fn raw_id, {ok, invalid} ->
-        case Integer.parse(raw_id) do
-          {id, ""} -> {[id | ok], invalid}
-          _ -> {ok, [raw_id | invalid]}
-        end
-      end)
+    {ok_ids, invalid_ids} = parse_user_ids(msg["data"]["userIds"])
 
     if not Enum.empty?(invalid_ids) do
       reason = "invalid user ids: #{Enum.join(invalid_ids, ", ")}"
@@ -341,6 +334,34 @@ defmodule Teiserver.Player.TachyonHandler do
       {:reply, :ok, {:text, error}, state}
     else
       case Player.Session.subscribe_updates(state.user.id, ok_ids) do
+        :ok ->
+          {:response, cmd_id, nil, state}
+
+        {:error, {:invalid_ids, invalid_ids}} ->
+          reason = "invalid user ids: #{Enum.join(invalid_ids, ", ")}"
+
+          error =
+            Schema.error_response(cmd_id, message_id, :invalid_request, reason)
+            |> Jason.encode!()
+
+          {:reply, :ok, {:text, error}, state}
+      end
+    end
+  end
+
+  def handle_command("user/unsubscribeUpdates" = cmd_id, "request", message_id, msg, state) do
+    {ok_ids, invalid_ids} = parse_user_ids(msg["data"]["userIds"])
+
+    if not Enum.empty?(invalid_ids) do
+      reason = "invalid user ids: #{Enum.join(invalid_ids, ", ")}"
+
+      error =
+        Schema.error_response(cmd_id, message_id, :invalid_request, reason)
+        |> Jason.encode!()
+
+      {:reply, :ok, {:text, error}, state}
+    else
+      case Player.Session.unsubscribe_updates(state.user.id, ok_ids) do
         :ok ->
           {:response, cmd_id, nil, state}
 
@@ -432,5 +453,16 @@ defmodule Teiserver.Player.TachyonHandler do
       # invalid markers won't be found in the queue
       _ -> {:marker, :invalid}
     end
+  end
+
+  # that kind of parsing can probably be extracted, will likely be generally useful
+  @spec parse_user_ids([String.t()]) :: {[T.userid()], [String.t()]}
+  defp parse_user_ids(raw_ids) do
+    Enum.reduce(raw_ids, {[], []}, fn raw_id, {ok, invalid} ->
+      case Integer.parse(raw_id) do
+        {id, ""} -> {[id | ok], invalid}
+        _ -> {ok, [raw_id | invalid]}
+      end
+    end)
   end
 end

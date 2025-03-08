@@ -159,6 +159,19 @@ defmodule Teiserver.Account.FriendRequestLib do
     end)
   end
 
+  @doc """
+  Similar to list_incoming_friend_requests_of_userid but doesn't use a cache
+  and returns the entire records
+  """
+  @spec list_incoming_friend_requests(T.userid()) :: [map()]
+  def list_incoming_friend_requests(userid) do
+    Account.list_friend_requests(
+      where: [
+        to_user_id: userid
+      ]
+    )
+  end
+
   @spec list_outgoing_friend_requests_of_userid(T.userid()) :: [T.userid()]
   def list_outgoing_friend_requests_of_userid(userid) do
     Teiserver.cache_get_or_store(:account_outgoing_friend_request_cache, userid, fn ->
@@ -172,5 +185,18 @@ defmodule Teiserver.Account.FriendRequestLib do
         to_user_id
       end)
     end)
+  end
+
+  @doc """
+  Similar to list_incoming_friend_requests_of_userid but doesn't use a cache
+  and returns the entire records
+  """
+  @spec list_outgoing_friend_requests(T.userid()) :: [map()]
+  def list_outgoing_friend_requests(userid) do
+    Account.list_friend_requests(
+      where: [
+        from_user_id: userid
+      ]
+    )
   end
 end

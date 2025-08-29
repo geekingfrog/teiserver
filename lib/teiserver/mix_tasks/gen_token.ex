@@ -12,13 +12,13 @@ defmodule Mix.Tasks.Teiserver.GenToken do
   @shortdoc "generate an oauth token for testing"
 
   use Mix.Task
+  require Logger
 
   @impl Mix.Task
   def run(args) do
     shell = Mix.shell()
-    shell.info("raw args: #{inspect(args)}")
+    Logger.configure(level: :error)
     {parsed, _, _errors} = OptionParser.parse(args, strict: [user: :string, app: :string])
-    shell.info("parsed args: #{inspect(parsed)}")
 
     Application.ensure_all_started([:ecto, :ecto_sql, :tzdata])
     Teiserver.Repo.start_link()

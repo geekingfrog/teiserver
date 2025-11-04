@@ -40,7 +40,7 @@ defmodule Teiserver.TachyonBattle do
     end
   end
 
-  @spec start_battle(Teiserver.Autohost.id(), Teiserver.Battle.id()) ::
+  @spec start_battle(Teiserver.Autohost.id(), T.match_id()) ::
           {:ok, T.id(), pid()} | {:error, term()}
   def start_battle(autohost_id, match_id) do
     battle_id = gen_id()

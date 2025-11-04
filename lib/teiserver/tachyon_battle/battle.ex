@@ -13,7 +13,7 @@ defmodule Teiserver.TachyonBattle.Battle do
 
   @type state :: %{
           id: T.id(),
-          match_id: Teiserver.Battle.Match.id() | nil,
+          match_id: T.match_id(),
           autohost_id: Teiserver.Autohost.id(),
           autohost_pid: pid(),
           autohost_timeout: timeout(),

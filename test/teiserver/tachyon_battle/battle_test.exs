@@ -10,7 +10,7 @@ defmodule Teiserver.TachyonBattle.BattleTest do
       autohost_id = :rand.uniform(10_000_000)
       match_id = :rand.uniform(10_000_000)
       Teiserver.Autohost.Registry.register(%{id: autohost_id})
-      {:ok, battle_id, _pid} = Battle.start_battle(autohost_id, match_id)
+      {:ok, battle_id, _pid} = Battle.start_battle(autohost_id, match_id, true)
       poll_until_some(fn -> Battle.lookup(battle_id) end)
     end
   end

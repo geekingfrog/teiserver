@@ -2,7 +2,6 @@ defmodule Teiserver.Battle.Match do
   use TeiserverWeb, :schema
 
   schema "teiserver_battle_matches" do
-    # TODO Remove after Tachyon
     field :server_uuid, :string
     field :uuid, :string
     field :game_id, :string
@@ -26,12 +25,8 @@ defmodule Teiserver.Battle.Match do
     # Scavengers, Raptors, Bots, Duel, Small Team, Large Team, FFA, Team FFA
     field :game_type, :string
 
-    # TODO Remove after Tachyon
     belongs_to :founder, Teiserver.Account.User
     field :bots, :map
-
-    # TODO: Clan support?
-    # TODO: Tourney support?
 
     belongs_to :queue, Teiserver.Game.Queue
     belongs_to :rating_type, Teiserver.Game.RatingType

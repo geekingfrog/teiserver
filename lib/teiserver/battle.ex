@@ -402,15 +402,17 @@ defmodule Teiserver.Battle do
     :ok
   end
 
-  def create_tachyon_matchmaking_match(start_script) do
+  @spec create_match_from_start_script(Teiserver.TachyonBattle.start_script(), boolean()) ::
+          {:ok, Match.t()} | {:error, Ecto.Changeset.t()}
+  def create_match_from_start_script(start_script, matchmaking) do
     ally_teams = start_script.allyTeams
 
     team_count = ally_teams |> Enum.count()
 
     team_size =
       ally_teams
-      |> Enum.map(fn at -> at.teams |> Enum.count() end)
-      |> Enum.max(fn -> 0 end)
+      |> Enum.map(&Enum.count(&1.teams))
+      |> Enum.max()
 
     game_type = MatchLib.game_type(team_size, team_count)
 
@@ -422,36 +424,28 @@ defmodule Teiserver.Battle do
       team_size: team_size,
       game_type: game_type,
       passworded: false,
-      matchmaking: true,
+      matchmaking: matchmaking,
       bots: Map.new(),
       tags: Map.new(),
-      started: Timex.now()
+      started: DateTime.utc_now()
     }
 
     case create_tachyon_match(match_params) do
       {:ok, match} ->
-        Telemetry.increment(:matchmaking_matches_started)
+        for {ally_team, index} <- Enum.with_index(ally_teams),
+            team <- ally_team.teams,
+            player <- team.players do
+          %{
+            user_id: String.to_integer(player.userId),
+            name: player.name,
+            team_id: index,
+            party_id: nil,
+            match_id: match.id
+          }
+          |> create_match_membership()
+        end
 
-        ally_teams
-        |> Enum.with_index(0)
-        |> Enum.flat_map(fn {at, index} ->
-          at.teams
-          |> Enum.flat_map(fn t ->
-            t.players
-            |> Enum.map(fn p ->
-              %{
-                user_id: String.to_integer(p.userId),
-                name: p.name,
-                team_id: index,
-                party_id: nil,
-                match_id: match.id
-              }
-            end)
-          end)
-        end)
-        |> Enum.each(fn membership_params ->
-          create_match_membership(membership_params)
-        end)
+        Telemetry.increment(:matches_started)
 
         {:ok, match}
 
@@ -472,24 +466,28 @@ defmodule Teiserver.Battle do
     match = get_match!(match_id)
 
     already_finished? = match.finished != nil
-    winner = List.first(winning_ally_teams, nil)
+    winning_ally_team = List.first(winning_ally_teams)
 
     # TODO Currently trusting the first received event, should be reworked to accept what the majority agrees on
+    if winning_ally_teams != match.winning_team do
+      Logger.warning("Match #{match_id} winning team conflict!")
+    end
+
     cond do
-      not already_finished? and winner != nil ->
-        list_match_memberships(search: [match_id: match.id, team_id: winner])
+      not already_finished? and winning_ally_team != nil ->
+        list_match_memberships(search: [match_id: match.id, team_id: winning_ally_team])
         |> Enum.each(fn membership ->
           update_match_membership(membership, %{win: true})
         end)
 
-        update_tachyon_match(match, %{finished: time, winning_team: winner, processed: true})
+        update_tachyon_match(match, %{
+          finished: time,
+          winning_team: winning_ally_team,
+          processed: true
+        })
 
       not already_finished? ->
         update_tachyon_match(match, %{finished: time, processed: true})
-
-      winner != match.winning_team ->
-        Logger.warning("Match #{match_id} winning team conflict!")
-        {:ok, match}
 
       true ->
         {:ok, match}

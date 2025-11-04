@@ -22,11 +22,11 @@ defmodule Teiserver.TachyonBattle do
   @doc """
   Start a battle process and connects it to the given autohost
   """
-  @spec start_battle(Bot.id(), T.start_script()) ::
+  @spec start_battle(Bot.id(), T.start_script(), boolean()) ::
           {:ok, {id(), pid()}, Autohost.start_response()} | {:error, term()}
-  def start_battle(autohost_id, start_script) when is_map(start_script) do
-    with {:ok, match} <- Battle.create_tachyon_matchmaking_match(start_script),
-         {:ok, battle_id, pid} <- start_battle(autohost_id, match.id) do
+  def start_battle(autohost_id, start_script, matchmaking) do
+    with {:ok, match} <- Battle.create_match_from_start_script(start_script, matchmaking),
+         {:ok, battle_id, pid} <- start_battle_process(autohost_id, match.id) do
       start_script = Map.put(start_script, :battleId, battle_id)
 
       Logger.info(
@@ -40,9 +40,9 @@ defmodule Teiserver.TachyonBattle do
     end
   end
 
-  @spec start_battle(Teiserver.Autohost.id(), T.match_id()) ::
+  @spec start_battle_process(Teiserver.Autohost.id(), T.match_id()) ::
           {:ok, T.id(), pid()} | {:error, term()}
-  def start_battle(autohost_id, match_id) do
+  defp start_battle_process(autohost_id, match_id) do
     battle_id = gen_id()
     # TODO: handle potential errors, like "already registered"
     case TachyonBattle.Supervisor.start_battle(battle_id, match_id, autohost_id) do

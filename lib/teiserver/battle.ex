@@ -269,7 +269,7 @@ defmodule Teiserver.Battle do
   def update_tachyon_match(%Match{} = match, attrs) do
     match
     |> Match.update_tachyon_match(attrs)
-    |> Repo.insert()
+    |> Repo.update()
   end
 
   @doc """
@@ -498,7 +498,7 @@ defmodule Teiserver.Battle do
   def end_tachyon_match(match_id, time) do
     match = get_match!(match_id)
 
-    if match.finished != nil do
+    if match.finished == nil do
       update_tachyon_match(match, %{finished: time})
     else
       {:ok, match}
@@ -683,6 +683,12 @@ defmodule Teiserver.Battle do
   #   |> MatchMembershipLib.search(user_id: user_id, match_id: match_id)
   #   |> Repo.one!()
   # end
+
+  def get_match_memberships(match_id) do
+    MatchMembershipLib.get_match_memberships()
+    |> MatchMembershipLib.search(match_id: match_id)
+    |> Repo.all()
+  end
 
   def get_match_membership(user_id, match_id) do
     MatchMembershipLib.get_match_memberships()

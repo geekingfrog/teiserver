@@ -4,6 +4,7 @@ defmodule Teiserver.TachyonBattle.Battle do
   alias Teiserver.Autohost
   alias Teiserver.TachyonBattle.Types, as: T
   alias Teiserver.TachyonBattle.Registry
+  alias Teiserver.Battle
 
   # For now, don't do any restart. The genserver is only used to hold some
   # transient state. Later, we can attempt to reconstruct some state after
@@ -12,6 +13,7 @@ defmodule Teiserver.TachyonBattle.Battle do
 
   @type state :: %{
           id: T.id(),
+          match_id: Teiserver.Battle.Match.id() | nil,
           autohost_id: Teiserver.Autohost.id(),
           autohost_pid: pid(),
           autohost_timeout: timeout(),
@@ -53,11 +55,12 @@ defmodule Teiserver.TachyonBattle.Battle do
   end
 
   @impl true
-  def init(%{battle_id: battle_id, autohost_id: autohost_id} = args) do
+  def init(%{battle_id: battle_id, match_id: match_id, autohost_id: autohost_id} = args) do
     Logger.metadata(actor_type: :battle, actor_id: battle_id)
 
     state = %{
       id: battle_id,
+      match_id: match_id,
       autohost_id: autohost_id,
       autohost_pid: nil,
       # the timeout is absurdly short because there is no real recovery if the
@@ -116,15 +119,20 @@ defmodule Teiserver.TachyonBattle.Battle do
   def handle_cast({:update_event, ev}, state) do
     case ev.update do
       :start ->
+        Battle.start_tachyon_match(state.match_id, ev.time)
         {:noreply, %{state | battle_state: :in_progress}}
 
       {:finished, _} ->
+        Battle.end_tachyon_match(state.match_id, ev.time, ev.user_id, ev.winning_ally_teams)
         {:noreply, %{state | battle_state: :finished}}
 
       {:engine_crash, _} ->
+        Battle.end_tachyon_match(state.match_id, ev.time)
         {:stop, :shutdown, %{state | battle_state: :shutting_down}}
 
       :engine_quit ->
+        Battle.end_tachyon_match(state.match_id, ev.time)
+        Battle.rate_tachyon_match(state.match_id)
         {:stop, :shutdown, %{state | battle_state: :shutting_down}}
 
       {:player_chat_broadcast, %{destination: :all, message: "!stop"}} ->

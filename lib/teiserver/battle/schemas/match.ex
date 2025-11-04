@@ -2,22 +2,31 @@ defmodule Teiserver.Battle.Match do
   use TeiserverWeb, :schema
 
   schema "teiserver_battle_matches" do
+    # TODO Remove after Tachyon
     field :server_uuid, :string
     field :uuid, :string
     field :game_id, :string
+
     field :map, :string
+    field :engine_version, :string
+    field :game_version, :string
+
     # The end of match data to be provided by clients
     field :data, :map, default: %{}
     field :tags, :map
 
     field :winning_team, :integer
+
     field :team_count, :integer
     field :team_size, :integer
+
     field :passworded, :boolean
     field :processed, :boolean, default: false
+    field :matchmaking, :boolean, default: false
     # Scavengers, Raptors, Bots, Duel, Small Team, Large Team, FFA, Team FFA
     field :game_type, :string
 
+    # TODO Remove after Tachyon
     belongs_to :founder, Teiserver.Account.User
     field :bots, :map
 
@@ -61,6 +70,30 @@ defmodule Teiserver.Battle.Match do
       ~w(server_uuid uuid game_id map data tags team_count team_size passworded game_type founder_id bots started winning_team finished processed queue_id game_duration)a
     )
     |> validate_required(~w(founder_id)a)
+  end
+
+  @spec create_tachyon_match(map(), map()) :: Ecto.Changeset.t()
+  def create_tachyon_match(struct, params \\ %{}) do
+    struct
+    |> cast(
+      params,
+      ~w(map engine_version game_version team_count team_size passworded matchmaking game_type bots started)a
+    )
+    |> validate_required(
+      ~w(map engine_version game_version team_count team_size matchmaking game_type)a
+    )
+  end
+
+  @spec update_tachyon_match(map(), map()) :: Ecto.Changeset.t()
+  def update_tachyon_match(struct, params \\ %{}) do
+    struct
+    |> cast(
+      params,
+      ~w(map engine_version game_version team_count team_size passworded matchmaking game_type bots started finished game_duration processed winning_team)a
+    )
+    |> validate_required(
+      ~w(map engine_version game_version team_count team_size matchmaking game_type)a
+    )
   end
 
   @spec authorize(Atom.t(), Plug.Conn.t(), map()) :: Boolean.t()

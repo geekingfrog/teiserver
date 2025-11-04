@@ -11,27 +11,10 @@ defmodule Teiserver.TachyonBattle do
   require Logger
   alias Teiserver.Bot
   alias Teiserver.TachyonBattle.Types, as: T
-  alias Teiserver.{TachyonBattle, Autohost}
+  alias Teiserver.{TachyonBattle, Autohost, Battle}
 
   @type id :: T.id()
   @type start_script :: T.start_script()
-
-  @spec start_battle(Teiserver.Autohost.id()) :: {:ok, T.id(), pid()} | {:error, term()}
-  def start_battle(autohost_id) do
-    battle_id = gen_id()
-    # TODO: handle potential errors, like "already registered"
-    case TachyonBattle.Supervisor.start_battle(battle_id, autohost_id) do
-      {:ok, pid} ->
-        {:ok, battle_id, pid}
-
-      {:ok, pid, _info} ->
-        {:ok, battle_id, pid}
-
-      err ->
-        Logger.warning("Cannot start battle: #{inspect(err)}")
-        {:error, "cannot start battle: #{inspect(err)}"}
-    end
-  end
 
   @spec lookup(T.id()) :: pid() | nil
   defdelegate lookup(battle_id), to: TachyonBattle.Registry
@@ -41,16 +24,37 @@ defmodule Teiserver.TachyonBattle do
   """
   @spec start_battle(Bot.id(), T.start_script()) ::
           {:ok, {id(), pid()}, Autohost.start_response()} | {:error, term()}
-  def start_battle(autohost_id, start_script) do
-    with {:ok, battle_id, pid} <- start_battle(autohost_id) do
+  def start_battle(autohost_id, start_script) when is_map(start_script) do
+    with {:ok, match} <- Battle.create_tachyon_matchmaking_match(start_script),
+         {:ok, battle_id, pid} <- start_battle(autohost_id, match.id) do
       start_script = Map.put(start_script, :battleId, battle_id)
 
-      Logger.info("Starting battle with id #{battle_id} on autohost #{autohost_id}")
+      Logger.info(
+        "Starting battle with id #{battle_id} and match id #{match.id} on autohost #{autohost_id}"
+      )
 
       case Teiserver.Autohost.start_battle(autohost_id, start_script) do
         {:ok, data} -> {:ok, {battle_id, pid}, data}
         x -> x
       end
+    end
+  end
+
+  @spec start_battle(Teiserver.Autohost.id(), Teiserver.Battle.id()) ::
+          {:ok, T.id(), pid()} | {:error, term()}
+  def start_battle(autohost_id, match_id) do
+    battle_id = gen_id()
+    # TODO: handle potential errors, like "already registered"
+    case TachyonBattle.Supervisor.start_battle(battle_id, match_id, autohost_id) do
+      {:ok, pid} ->
+        {:ok, battle_id, pid}
+
+      {:ok, pid, _info} ->
+        {:ok, battle_id, pid}
+
+      err ->
+        Logger.warning("Cannot start battle: #{inspect(err)}")
+        {:error, "cannot start battle: #{inspect(err)}"}
     end
   end
 

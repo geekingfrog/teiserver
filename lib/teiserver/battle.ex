@@ -423,6 +423,8 @@ defmodule Teiserver.Battle do
       game_type: game_type,
       passworded: false,
       matchmaking: true,
+      bots: Map.new(),
+      tags: Map.new(),
       started: Timex.now()
     }
 
@@ -473,7 +475,6 @@ defmodule Teiserver.Battle do
     winner = List.first(winning_ally_teams, nil)
 
     # TODO Currently trusting the first received event, should be reworked to accept what the majority agrees on
-
     cond do
       not already_finished? and winner != nil ->
         list_match_memberships(search: [match_id: match.id, team_id: winner])
@@ -481,10 +482,10 @@ defmodule Teiserver.Battle do
           update_match_membership(membership, %{win: true})
         end)
 
-        update_tachyon_match(match, %{finished: time, winning_team: winner})
+        update_tachyon_match(match, %{finished: time, winning_team: winner, processed: true})
 
       not already_finished? ->
-        update_tachyon_match(match, %{finished: time})
+        update_tachyon_match(match, %{finished: time, processed: true})
 
       winner != match.winning_team ->
         Logger.warning("Match #{match_id} winning team conflict!")
@@ -499,7 +500,7 @@ defmodule Teiserver.Battle do
     match = get_match!(match_id)
 
     if match.finished == nil do
-      update_tachyon_match(match, %{finished: time})
+      update_tachyon_match(match, %{finished: time, processed: true})
     else
       {:ok, match}
     end

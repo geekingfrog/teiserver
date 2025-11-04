@@ -57,9 +57,7 @@ defmodule Teiserver.Battle.Match do
       params,
       ~w(server_uuid uuid game_id map data tags team_count team_size passworded game_type founder_id bots started winning_team finished processed queue_id rating_type_id lobby_policy_id game_duration)a
     )
-    |> validate_required(
-      ~w(server_uuid uuid map tags team_count team_size passworded game_type founder_id bots started)a
-    )
+    |> validate_required(~w(map tags team_count team_size passworded game_type bots started)a)
   end
 
   @spec initial_changeset(map(), map()) :: Ecto.Changeset.t()
@@ -77,7 +75,7 @@ defmodule Teiserver.Battle.Match do
     struct
     |> cast(
       params,
-      ~w(map engine_version game_version team_count team_size passworded matchmaking game_type bots started)a
+      ~w(map engine_version game_version team_count team_size passworded matchmaking game_type tags bots started)a
     )
     |> validate_required(
       ~w(map engine_version game_version team_count team_size matchmaking game_type)a
@@ -89,7 +87,7 @@ defmodule Teiserver.Battle.Match do
     struct
     |> cast(
       params,
-      ~w(map engine_version game_version team_count team_size passworded matchmaking game_type bots started finished game_duration processed winning_team)a
+      ~w(map engine_version game_version team_count team_size passworded matchmaking game_type tags bots started finished game_duration processed winning_team)a
     )
     |> validate_required(
       ~w(map engine_version game_version team_count team_size matchmaking game_type)a

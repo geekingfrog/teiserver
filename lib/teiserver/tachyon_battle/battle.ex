@@ -115,6 +115,10 @@ defmodule Teiserver.TachyonBattle.Battle do
     # if that's not the case, we should terminate here
   end
 
+  def handle_call(:get_match_id, _from, state) do
+    {:reply, state.match_id, state}
+  end
+
   @impl true
   def handle_cast({:update_event, ev}, state) do
     case ev.update do
@@ -122,8 +126,8 @@ defmodule Teiserver.TachyonBattle.Battle do
         Battle.start_tachyon_match(state.match_id, ev.time)
         {:noreply, %{state | battle_state: :in_progress}}
 
-      {:finished, _} ->
-        Battle.end_tachyon_match(state.match_id, ev.time, ev.user_id, ev.winning_ally_teams)
+      {:finished, %{user_id: user_id, winning_ally_teams: winning_ally_teams}} ->
+        Battle.end_tachyon_match(state.match_id, ev.time, user_id, winning_ally_teams)
         {:noreply, %{state | battle_state: :finished}}
 
       {:engine_crash, _} ->

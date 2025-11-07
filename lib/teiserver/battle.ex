@@ -436,11 +436,9 @@ defmodule Teiserver.Battle do
             team <- ally_team.teams,
             player <- team.players do
           %{
-            user_id: String.to_integer(player.userId),
-            name: player.name,
+            match_id: match.id,
             team_id: index,
-            party_id: nil,
-            match_id: match.id
+            user_id: String.to_integer(player.userId)
           }
           |> create_match_membership()
         end
@@ -475,16 +473,18 @@ defmodule Teiserver.Battle do
 
     cond do
       not already_finished? and winning_ally_team != nil ->
-        list_match_memberships(search: [match_id: match.id, team_id: winning_ally_team])
-        |> Enum.each(fn membership ->
-          update_match_membership(membership, %{win: true})
-        end)
+        Repo.transaction(fn ->
+          list_match_memberships(search: [match_id: match.id, team_id: winning_ally_team])
+          |> Enum.each(fn membership ->
+            update_match_membership(membership, %{win: true})
+          end)
 
-        update_tachyon_match(match, %{
-          finished: time,
-          winning_team: winning_ally_team,
-          processed: true
-        })
+          update_tachyon_match(match, %{
+            finished: time,
+            winning_team: winning_ally_team,
+            processed: true
+          })
+        end)
 
       not already_finished? ->
         update_tachyon_match(match, %{finished: time, processed: true})

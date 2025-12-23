@@ -8,6 +8,8 @@ defmodule Teiserver.Party do
   with regard to invites.
   """
 
+  require Logger
+
   alias Teiserver.Config
   alias Teiserver.Data.Types, as: T
   alias Teiserver.Matchmaking
@@ -25,6 +27,34 @@ defmodule Teiserver.Party do
       {:ok, pid, _info} -> {:ok, party_id, pid}
       :ignore -> {:error, :ignore}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  def restore_parties() do
+    blobs = Teiserver.KvStore.scan("party")
+    Logger.info("Attempting to restore #{length(blobs)} parties")
+
+    try do
+      n =
+        Enum.map(blobs, fn b ->
+          Task.async(fn -> restore_party(b.key, b.value) end)
+        end)
+        |> Task.await_many()
+        |> Enum.count()
+
+      Logger.info("Restored #{n} parties from snapshot")
+    after
+      Enum.map(blobs, fn b -> {b.store, b.key} end)
+      |> Teiserver.KvStore.delete_many()
+    end
+  end
+
+  defp restore_party(id, serialized_state) do
+    ref = make_ref()
+    Party.Supervisor.start_party_from_state(id, serialized_state, {self(), ref})
+
+    receive do
+      {^ref, res} -> {id, res}
     end
   end
 

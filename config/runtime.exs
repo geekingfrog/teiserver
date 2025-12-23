@@ -221,6 +221,9 @@ config :logger, :notice_log, path: "#{log_root_path}/notice.log"
 
 config :logger, :info_log, path: "#{log_root_path}/info.log"
 
+config :logger, LoggerBackends.Console, level: :info
+
+
 enable_discord_bridge =
   Teiserver.ConfigHelpers.get_env("TEI_ENABLE_DISCORD_BRIDGE", false, :bool)
 

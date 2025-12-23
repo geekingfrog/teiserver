@@ -5,6 +5,8 @@ defmodule Teiserver.Party.Server do
 
   @behaviour :gen_statem
 
+  require Logger
+
   alias Teiserver.Party
   alias Teiserver.Player
   alias Teiserver.Matchmaking
@@ -173,6 +175,9 @@ defmodule Teiserver.Party.Server do
 
   @impl :gen_statem
   def init({party_id, {:user, user_id, creator_pid}}) do
+    Process.flag(:trap_exit, true)
+    Logger.metadata(actor_type: :party, actor_id: party_id)
+
     data =
       %{
         version: 0,
@@ -186,6 +191,37 @@ defmodule Teiserver.Party.Server do
       |> add_member(user_id, creator_pid)
 
     {:ok, :running, data}
+  end
+
+  def init({party_id, {:snapshot, serialized_state, {caller, ref}}}) do
+    Process.flag(:trap_exit, true)
+    Logger.metadata(actor_type: :party, actor_id: party_id)
+
+    IO.puts("Restoring party with id #{party_id}")
+    snapshot = :erlang.binary_to_term(serialized_state)
+
+    send(caller, {ref, :ok})
+
+    now = DateTime.utc_now()
+
+    data = %{
+      version: snapshot.version,
+      id: party_id,
+      pid: self(),
+      monitors: MC.new(),
+      members: [],
+      invited:
+        Enum.filter(snapshot.invited, &DateTime.before?(now, &1))
+        |> Enum.map(fn i ->
+          duration = max(1, DateTime.diff(i.valid_until, now))
+          tref = :timer.send_after(duration, {:invite_timeout, i.id})
+          Map.put(i, :timeout_ref, tref)
+        end),
+      # no restoration of matchmaking yet
+      matchmaking: nil
+    }
+
+    {:ok, :starting_up, data}
   end
 
   @impl :gen_statem
@@ -335,7 +371,7 @@ defmodule Teiserver.Party.Server do
       do: {:keep_state, data, [{:reply, from, {:error, :already_queued}}]}
 
   def handle_event({:call, from}, {:join_matchmaking_queues, queues}, :running, data) do
-    members_id = Enum.map(state.members, fn m -> m.id end)
+    members_id = Enum.map(data.members, fn m -> m.id end)
 
     result =
       Enum.reduce_while(queues, data.monitors, fn {q_id, version}, monitors ->
@@ -441,6 +477,10 @@ defmodule Teiserver.Party.Server do
       else: {:keep_state, data}
   end
 
+  def handle_event(:info, {:invite_timeout, _user_id}, :starting_up, data) do
+    {:keep_state, data, [:postpone]}
+  end
+
   def handle_event(:info, {:invite_timeout, user_id}, :running, data) do
     case Enum.find(data.invited, &(&1.id == user_id)) do
       nil ->
@@ -450,6 +490,24 @@ defmodule Teiserver.Party.Server do
         data = cancel_invite_internal(invite, data)
         {:keep_state, data}
     end
+  end
+
+  @impl :gen_statem
+  def terminate(:shutdown, :running, data) do
+    to_save =
+      Map.take(data, [:version, :id, :members, :matchmaking])
+      |> Map.put(:status, :shutting_down)
+      |> Map.put(
+        :invited,
+        Enum.map(data.invited, &Map.take(&1, [:id, :invited_at, :valid_until]))
+      )
+      |> :erlang.term_to_binary()
+
+    Teiserver.KvStore.put("party", data.id, to_save)
+  end
+
+  def terminate(reason, state, _data) do
+    Logger.warning("terminating because #{inspect(reason)} in state #{inspect(state)}")
   end
 
   defp notify_updated(data) do

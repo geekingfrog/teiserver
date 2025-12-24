@@ -120,11 +120,6 @@ defmodule Teiserver.Tachyon.Transport do
     {:push, {:ping, <<0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0>>}, state}
   end
 
-  def handle_info(:force_disconnect, state) do
-    # TODO: send a proper tachyon message to inform the client it is getting disconnected
-    {:stop, :normal, state}
-  end
-
   def handle_info({:timeout, message_id}, state) do
     {_, pendings} = Map.pop(state.pending_responses, message_id)
 

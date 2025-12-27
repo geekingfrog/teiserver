@@ -50,12 +50,7 @@ defmodule Teiserver.Party do
   end
 
   defp restore_party(id, serialized_state) do
-    ref = make_ref()
-    Party.Supervisor.start_party_from_state(id, serialized_state, {self(), ref})
-
-    receive do
-      {^ref, res} -> {id, res}
-    end
+    Party.Supervisor.start_party_from_snapshot(id, serialized_state)
   end
 
   @spec lookup(id()) :: pid() | nil

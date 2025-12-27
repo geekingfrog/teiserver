@@ -20,10 +20,10 @@ defmodule Teiserver.Party.Supervisor do
     )
   end
 
-  def start_party_from_state(party_id, serialized_state, cb) do
+  def start_party_from_snapshot(party_id, serialized_state) do
     DynamicSupervisor.start_child(
       __MODULE__,
-      {Teiserver.Party.Server, {party_id, {:snapshot, serialized_state, cb}}}
+      {Teiserver.Party.Server, {party_id, {:snapshot, serialized_state}}}
     )
   end
 

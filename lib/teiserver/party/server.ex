@@ -56,6 +56,17 @@ defmodule Teiserver.Party.Server do
   end
 
   @doc """
+  To be called when the system is starting up and recovering from a restart.
+  The player has to already be in the party.
+  """
+  @spec rejoin_party(id(), T.userid()) :: :ok | {:error, :invalid_party | :not_a_member}
+  def rejoin_party(party_id, user_id) do
+    :gen_statem.call(via_tuple(party_id), {:rejoin, user_id})
+  catch
+    :exit, {:noproc, _} -> {:error, :invalid_party}
+  end
+
+  @doc """
   Create an invite for the given player, ensuring they're not alreay part of the party
   """
   @spec create_invite(id(), T.userid()) ::
@@ -193,15 +204,12 @@ defmodule Teiserver.Party.Server do
     {:ok, :running, data}
   end
 
-  def init({party_id, {:snapshot, serialized_state, {caller, ref}}}) do
+  def init({party_id, {:snapshot, serialized_state}}) do
     Process.flag(:trap_exit, true)
     Logger.metadata(actor_type: :party, actor_id: party_id)
+    Logger.debug("Restoring party from snapshot")
 
-    IO.puts("Restoring party with id #{party_id}")
     snapshot = :erlang.binary_to_term(serialized_state)
-
-    send(caller, {ref, :ok})
-
     now = DateTime.utc_now()
 
     data = %{
@@ -210,6 +218,7 @@ defmodule Teiserver.Party.Server do
       pid: self(),
       monitors: MC.new(),
       members: [],
+      ids_to_rejoin: snapshot.ids_to_rejoin,
       invited:
         Enum.filter(snapshot.invited, &DateTime.before?(now, &1))
         |> Enum.map(fn i ->
@@ -221,12 +230,36 @@ defmodule Teiserver.Party.Server do
       matchmaking: nil
     }
 
+    # TODO: set a state timeout to tear down everything if stays in :starting_up
+    # for too long
     {:ok, :starting_up, data}
   end
 
   @impl :gen_statem
   def handle_event({:call, from}, :get_state, _state, data) do
     {:keep_state, data, [{:reply, from, data}]}
+  end
+
+  def handle_event({:call, from}, {:rejoin, user_id}, :starting_up, data) do
+    if MapSet.member?(data.ids_to_rejoin, user_id) do
+      data = Map.update!(data, :ids_to_rejoin, fn ids -> MapSet.delete(ids, user_id) end)
+
+      actions = [{:reply, from, :ok}]
+
+      if Enum.empty?(data.ids_to_rejoin) do
+        data = Map.delete(data, :ids_to_rejoin)
+        Logger.debug("all member rejoined, start up completed")
+        {:next_state, :running, data, actions}
+      else
+        {:keep_state, data, actions}
+      end
+    else
+      {:keep_state, data, [{:reply, from, {:error, :not_in_party}}]}
+    end
+  end
+
+  def handle_event({:call, from}, {:rejoin, _user_id}, _state, data) do
+    {:keep_state, data, [{:reply, from, {:error, :invalid_party}}]}
   end
 
   def handle_event({:call, from}, {:leave, user_id}, :running, data) do
@@ -494,9 +527,15 @@ defmodule Teiserver.Party.Server do
 
   @impl :gen_statem
   def terminate(:shutdown, :running, data) do
+    ids_to_rejoin =
+      data.members
+      |> Enum.map(& &1.id)
+      |> MapSet.new()
+
     to_save =
       Map.take(data, [:version, :id, :members, :matchmaking])
       |> Map.put(:status, :shutting_down)
+      |> Map.put(:ids_to_rejoin, ids_to_rejoin)
       |> Map.put(
         :invited,
         Enum.map(data.invited, &Map.take(&1, [:id, :invited_at, :valid_until]))

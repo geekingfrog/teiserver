@@ -1007,9 +1007,6 @@ defmodule Teiserver.TachyonLobby.Lobby do
       Enum.empty?(data.bosses) and Enum.count(data.players, &(!bot_id?(elem(&1, 0)))) > 1 ->
         vote = new_vote(data, user_id, {:appoint_boss, appointee_id})
 
-        :timer.seconds(vote.duration_s)
-        |> :timer.send_after({:vote_timeout, vote.id})
-
         events = [{:start_vote, vote}]
         data = process_events(events, data) |> Map.get(:data)
         {:keep_state, data, [{:reply, from, :ok}]}
@@ -1504,6 +1501,7 @@ defmodule Teiserver.TachyonLobby.Lobby do
     |> put_in([:data, :current_vote], vote_state)
     |> update_in([:data, :vote_idx], &(&1 + 1))
     |> Map.update!(:updates, &[ev | &1])
+    |> Map.update!(:actions, &[ev | &1])
   end
 
   defp process_event({:cast_vote, user_id, _ballot}, aggregate)
@@ -2040,9 +2038,6 @@ defmodule Teiserver.TachyonLobby.Lobby do
       Enum.count(state.players, fn {_id, p} -> not bot_id?(p.id) end) > 1 ->
         vote = new_vote(state, user_id, {:change_map, new_name})
 
-        :timer.seconds(vote.duration_s)
-        |> :timer.send_after({:vote_timeout, vote.id})
-
         {:ok, [{:start_vote, vote}]}
 
       true ->
@@ -2065,6 +2060,11 @@ defmodule Teiserver.TachyonLobby.Lobby do
   defp process_event_actions(aggregate) do
     Enum.each(aggregate.actions, &process_event_action(&1, aggregate.data))
     aggregate
+  end
+
+  defp process_event_action({:start_vote, vote}, _fsm_data) do
+    diff = max(0, DateTime.diff(vote.until, DateTime.utc_now(), :millisecond))
+    :timer.send_after(diff, {:vote_timeout, vote.id})
   end
 
   defp process_event_action({:vote_ended, vote, outcome}, fsm_data) do

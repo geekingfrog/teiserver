@@ -67,13 +67,28 @@ defmodule Teiserver.TachyonLobby.LobbyTest do
   end
 
   test "create with defaults" do
+    AssetFixtures.create_map(%{
+      spring_name: "the map",
+      display_name: "the map",
+      thumbnail_url: "http://irrelevant.com",
+      modoptions: %{
+        mapmetadata_startpos: "ImNvdWNvdSIK",
+        mapmetadata_startboxes_set: "ImhlbGxvIgo="
+      }
+    })
+
     {:ok, _pid, details} =
       mk_start_params([1, 1])
+      |> Map.put(:map_name, "the map")
       |> Lobby.create()
 
     assert details.boss_enabled? == false
     assert details.bosses == MapSet.new()
-    assert details.game_options == %{}
+
+    assert details.game_options == %{
+             "mapmetadata_startpos" => "ImNvdWNvdSIK",
+             "mapmetadata_startboxes_set" => "ImhlbGxvIgo="
+           }
   end
 
   test "create lobby with game options" do
@@ -1715,6 +1730,35 @@ defmodule Teiserver.TachyonLobby.LobbyTest do
                       {:updated,
                        %{game_options: %{"foo" => nil, "ranked" => "false", "blah" => "qux"}}}}
     end
+
+    test "changing map also set polystartboxes" do
+      AssetFixtures.create_map(%{
+        spring_name: "new map",
+        display_name: "new map",
+        thumbnail_url: "http://irrelevant.com",
+        modoptions: %{
+          mapmetadata_startpos: "ImNvdWNvdSIK",
+          mapmetadata_startboxes_set: "ImhlbGxvIgo="
+        }
+      })
+
+      {:ok, _pid, %LT.Details{id: id}} =
+        mk_start_params([2, 2])
+        |> Map.put(:boss_enabled?, true)
+        |> Lobby.create()
+
+      :ok = Lobby.update_properties(id, @default_user_id, %{map_name: "new map"})
+
+      assert_receive {:lobby, ^id,
+                      {:updated,
+                       %{
+                         map_name: "new map",
+                         game_options: %{
+                           "mapmetadata_startpos" => "ImNvdWNvdSIK",
+                           "mapmetadata_startboxes_set" => "ImhlbGxvIgo="
+                         }
+                       }}}
+    end
   end
 
   describe "update tags" do
@@ -2108,6 +2152,35 @@ defmodule Teiserver.TachyonLobby.LobbyTest do
       %{bots: [%{host_user_id: @default_user_id, ai_short_name: "bot short name"}]} = t2
       assert not is_map_key(t1, :bots)
       assert not is_map_key(t2, :players)
+    end
+
+    test "with an empty team" do
+      startbox1 = %{top: 0, left: 0, bottom: 0.1, right: 0.1}
+      startbox2 = %{top: 0, left: 0, bottom: 0.2, right: 0.2}
+      startbox3 = %{top: 0, left: 0, bottom: 0.3, right: 0.3}
+
+      at_config = [
+        %LT.AllyTeamConfig{max_teams: 2, teams: [%{max_players: 1}], start_box: startbox1},
+        %LT.AllyTeamConfig{max_teams: 2, teams: [%{max_players: 1}], start_box: startbox2},
+        %LT.AllyTeamConfig{max_teams: 2, teams: [%{max_players: 1}], start_box: startbox3}
+      ]
+
+      {:ok, _pid, %LT.Details{id: id}} =
+        mk_start_params([1, 1, 1])
+        |> Map.put(:ally_team_config, at_config)
+        |> Lobby.create()
+
+      {:ok, _lobby_pid, _details} = Lobby.join(id, mk_player("other-user-id"))
+      {:ok, _team_details} = Lobby.join_ally_team(id, "other-user-id", 2)
+
+      start_script = LobbyProcess.get_start_script(id)
+
+      # ally teams may not have empty teams, so they are filtered out. What
+      # we really care about is the correct assignment of start box to ally teams
+      assert %{ally_teams: [at1, at3]} = start_script
+
+      %{start_box: ^startbox1, teams: [%{players: [%AT.Player{user_id: @default_user_id}]}]} = at1
+      %{start_box: ^startbox3, teams: [%{players: [%AT.Player{user_id: "other-user-id"}]}]} = at3
     end
   end
 

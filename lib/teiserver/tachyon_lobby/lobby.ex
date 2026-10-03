@@ -25,6 +25,7 @@ defmodule Teiserver.TachyonLobby.Lobby do
 
   alias Plug.Crypto
   alias Teiserver.Account.User
+  alias Teiserver.Asset
   alias Teiserver.Autohost
   alias Teiserver.Autohost.Types, as: AT
   alias Teiserver.Cluster
@@ -39,6 +40,7 @@ defmodule Teiserver.TachyonLobby.Lobby do
   alias Teiserver.TachyonBattle
   alias Teiserver.TachyonLobby.Event
   alias Teiserver.TachyonLobby.Events
+  alias Teiserver.TachyonLobby.Events.UpdateMapName
   alias Teiserver.TachyonLobby.ListMonitor
   alias Teiserver.TachyonLobby.Registry, as: LobbyRegistry
   alias Teiserver.TachyonLobby.Supervisor, as: LobbySupervisor
@@ -305,6 +307,23 @@ defmodule Teiserver.TachyonLobby.Lobby do
         do: MapSet.new([start_params.creator_data.id]),
         else: MapSet.new()
 
+    client_specified_polystartboxes? =
+      is_map_key(start_params.game_options, "mapmetadata_startpos") or
+        is_map_key(start_params.game_options, "mapmetadata_startboxes_set")
+
+    game_options =
+      if client_specified_polystartboxes? do
+        start_params.game_options
+      else
+        case Asset.get_polygon_startboxes(start_params.map_name) do
+          nil ->
+            start_params.game_options
+
+          modoptions ->
+            Map.merge(modoptions, start_params.game_options)
+        end
+      end
+
     state =
       %LT.Data{
         id: id,
@@ -317,7 +336,7 @@ defmodule Teiserver.TachyonLobby.Lobby do
         boss_enabled?: start_params.boss_enabled?,
         bosses: bosses,
         ally_team_config: start_params.ally_team_config,
-        game_options: start_params.game_options,
+        game_options: game_options,
         tags: start_params.tags,
         players: %{
           start_params.creator_data.id => %LT.Player{
@@ -1616,11 +1635,23 @@ defmodule Teiserver.TachyonLobby.Lobby do
 
   @spec gen_start_script(LT.Data.t()) :: AT.StartScript.t()
   defp gen_start_script(%LT.Data{} = state) do
+    number_of_ally_teams =
+      Map.values(state.players)
+      |> Enum.max_by(& &1.team)
+      |> Map.get(:team)
+      |> elem(0)
+
+    base_ally_teams = List.duplicate([], number_of_ally_teams + 1)
+
     sorted =
       Map.values(state.players)
       |> Enum.sort_by(& &1.team)
       |> Enum.group_by(&elem(&1.team, 0))
-      |> Map.values()
+
+    sorted =
+      Enum.reduce(sorted, base_ally_teams, fn {idx, players}, base ->
+        List.replace_at(base, idx, players)
+      end)
 
     ally_teams =
       for {at, %LT.AllyTeamConfig{} = at_config} <- Enum.zip(sorted, state.ally_team_config) do
@@ -1704,7 +1735,7 @@ defmodule Teiserver.TachyonLobby.Lobby do
         {:ok, [%Events.StartVote{vote_state: vote}]}
 
       true ->
-        {:ok, [%Events.UpdateMapName{new_map: new_map}]}
+        {:ok, [UpdateMapName.new(new_map)]}
     end
   end
 

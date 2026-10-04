@@ -1663,7 +1663,7 @@ defmodule Teiserver.TachyonLobby.Lobby do
             |> Map.new()
           end
 
-        %{teams: teams, startBox: at_config.start_box}
+        %{teams: teams, start_box: at_config.start_box}
       end
 
     ally_teams = Enum.reject(ally_teams, fn at -> Enum.empty?(at.teams) end)

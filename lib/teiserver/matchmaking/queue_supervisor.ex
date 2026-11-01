@@ -18,34 +18,6 @@ defmodule Teiserver.Matchmaking.QueueSupervisor do
         team_size: 1,
         team_count: 2,
         algo: :bruteforce_filter
-      }),
-      QueueServer.init_state(%{
-        id: "2v2",
-        name: "2v2",
-        team_size: 2,
-        team_count: 2,
-        algo: :bruteforce_filter
-      }),
-      QueueServer.init_state(%{
-        id: "3v3",
-        name: "3v3",
-        team_size: 3,
-        team_count: 2,
-        algo: :bruteforce_filter
-      }),
-      QueueServer.init_state(%{
-        id: "4v4",
-        name: "4v4",
-        team_size: 4,
-        team_count: 2,
-        algo: :bruteforce_filter
-      }),
-      QueueServer.init_state(%{
-        id: "5v5",
-        name: "5v5",
-        team_size: 5,
-        team_count: 2,
-        algo: :bruteforce_filter
       })
     ]
   end
